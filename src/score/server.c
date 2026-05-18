@@ -98,7 +98,8 @@ static int handle_requests(const rnh_service_t *svc, conn_t *c) {
                 resp = &rnh_http_resp_bad;
                 close = 1;
             } else {
-                if (frauds < 0) frauds = 0; if (frauds > 5) frauds = 5;
+                if (frauds < 0) frauds = 0;
+                if (frauds > 5) frauds = 5;
                 resp = close ? &rnh_http_resp_score_close[frauds] : &rnh_http_resp_score[frauds];
             }
         }
@@ -155,7 +156,11 @@ int rnh_server_run(rnh_server_t *srv) {
                     if (nfd >= conn_table_cap) { close(nfd); continue; }
                     conn_t *c = &conn_table[nfd];
                     conn_reset(c, nfd);
-                    struct epoll_event cev = { .events = EPOLLIN | EPOLLET, .data.fd = nfd };
+                    // Registra IN+OUT+ET de uma vez. Sem epoll_ctl MOD por
+                    // request: EPOLLOUT em modo edge so reentra quando o
+                    // socket fica writeable, e so chamamos write quando temos
+                    // bytes pendentes (try_flush eh idempotente).
+                    struct epoll_event cev = { .events = EPOLLIN | EPOLLOUT | EPOLLET | EPOLLRDHUP, .data.fd = nfd };
                     if (epoll_ctl(epfd, EPOLL_CTL_ADD, nfd, &cev) != 0) {
                         close(nfd); c->fd = -1; continue;
                     }
@@ -194,11 +199,8 @@ int rnh_server_run(rnh_server_t *srv) {
                 conn_close(epfd, fd);
                 continue;
             }
-            // Garante EPOLLOUT enquanto wbuf nao drenou totalmente.
-            uint32_t want = EPOLLIN | EPOLLET;
-            if (c->wfill > 0) want |= EPOLLOUT;
-            struct epoll_event mev = { .events = want, .data.fd = fd };
-            (void)epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &mev);
+            // EPOLLOUT/IN ja estao armados em ET desde o accept;
+            // nao chama mais epoll_ctl(MOD) no hot path.
         }
     }
 

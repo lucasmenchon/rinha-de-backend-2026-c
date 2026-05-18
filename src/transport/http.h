@@ -7,6 +7,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 #define RNH_HTTP_BUF_SIZE      8192u
 #define RNH_HTTP_MAX_BODY      4096u

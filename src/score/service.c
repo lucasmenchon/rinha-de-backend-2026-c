@@ -6,6 +6,10 @@
 #include "../core/distance.h"
 #include "../core/knn.h"
 
+// Limiar para "early termination" da varredura IVF. Tunavel via env
+// RNH_EARLY_LIMIT (int64, L2sq quantizado). 0 = desligado.
+static int64_t g_early_limit = 0;
+
 // ----------------------------------------------------------------------------
 // Tabela de risco MCC. O arquivo mcc_risk.json e fixo no desafio; embutimos.
 // ----------------------------------------------------------------------------
@@ -29,6 +33,10 @@ static float mcc_lookup(const char *p, size_t n) {
 void rnh_service_init(rnh_service_t *svc, const rnh_index_t *idx, uint32_t nprobe) {
     svc->idx    = idx;
     svc->nprobe = nprobe ? nprobe : RNH_NPROBE;
+    {
+        const char *e = getenv("RNH_EARLY_LIMIT");
+        g_early_limit = (e && *e) ? (int64_t)strtoll(e, NULL, 10) : 0;
+    }
     // Constantes do desafio. Sao fixas pela spec.
     svc->norm.max_amount              = 10000.0f;
     svc->norm.max_installments        = 12.0f;
@@ -350,6 +358,12 @@ static int extract_features(const uint8_t *body, uint32_t body_len, rnh_features
 
 typedef struct { int64_t d; uint32_t list; } centd_t;
 
+// Limiar para "early termination" da varredura de listas IVF: quando o pior
+// dos K vizinhos ja esta abaixo deste limite (L2sq quantizado), as proximas
+// listas (cujos centroides estao mais distantes) raramente vao melhorar a
+// votacao. Tunavel em runtime via RNH_EARLY_LIMIT (env, int64).
+// (Variavel global g_early_limit declarada no topo do arquivo.)
+
 static void rank_centroids(const rnh_qvec_t q, const rnh_list_slot_t *lists,
                            uint32_t nlists, centd_t *out, uint32_t nprobe)
 {
@@ -397,11 +411,15 @@ int rnh_service_score(const rnh_service_t *svc,
         const uint8_t *lp = &labels[L->vec_offset];
         uint32_t n = L->vec_count;
         for (uint32_t j = 0; j < n; j++) {
+            // prefetch da proxima linha de cache (vetor = 32 bytes = meia linha)
+            if (j + 2 < n) __builtin_prefetch(&vp[(size_t)(j + 2) * 16], 0, 0);
             int64_t d = rnh_dist_l2sq(q, &vp[(size_t)j * 16]);
             if (d < rnh_topk_worst(&tk)) {
                 rnh_topk_offer(&tk, d, lp[j]);
             }
         }
+        // Early termination opcional (ver g_early_limit acima).
+        if (g_early_limit > 0 && rnh_topk_worst(&tk) <= g_early_limit) break;
     }
 
     *frauds_out = rnh_topk_fraud_count(&tk);

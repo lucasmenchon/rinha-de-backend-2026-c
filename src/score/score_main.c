@@ -38,8 +38,16 @@ int main(void) {
     fprintf(stderr, "[score] index %s loaded: nlists=%u nvectors=%u\n",
             idx_path, idx.hdr->nlists, idx.hdr->nvectors);
 
-    // Faz mlock somente da tabela de listas (centroides, hot path). Best-effort.
-    (void)mlock(idx.lists, (size_t)idx.hdr->nlists * RNH_LIST_SLOT_SIZE);
+    // Trava todas as paginas do indice em RAM. Evita page-fault no p99
+    // depois de qualquer pico de pressao de memoria. Best-effort: se o
+    // RLIMIT_MEMLOCK for baixo, segue a vida (madvise WILLNEED ja popula).
+    if (mlock(idx.base, idx.size) != 0) {
+        // fallback: tranca pelo menos a tabela de listas + labels (hot path).
+        (void)mlock(idx.lists, (size_t)idx.hdr->nlists * RNH_LIST_SLOT_SIZE);
+        (void)mlock(idx.labels, (size_t)idx.hdr->nvectors);
+        fprintf(stderr, "[score] mlock(all)=%s (fallback parcial aplicado)\n",
+                strerror(errno));
+    }
 
     rnh_service_t svc;
     rnh_service_init(&svc, &idx, nprobe);

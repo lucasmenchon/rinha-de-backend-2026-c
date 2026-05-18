@@ -21,6 +21,12 @@ int rnh_set_nonblock(int fd) {
 void rnh_tcp_tune(int fd) {
     int yes = 1;
     (void)setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
+#ifdef TCP_QUICKACK
+    // Desabilita delayed ACKs: para request/response pequeno e sincrono o
+    // ACK atrasado adiciona 40ms no pior caso. Linux re-arma sozinho, entao
+    // setamos a cada novo socket aceito.
+    (void)setsockopt(fd, IPPROTO_TCP, TCP_QUICKACK, &yes, sizeof(yes));
+#endif
 }
 
 int rnh_tcp_listen(uint16_t port, int backlog) {

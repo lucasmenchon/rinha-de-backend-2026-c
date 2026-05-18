@@ -57,15 +57,6 @@ static void pair_drop(int epfd, int fd) {
     }
 }
 
-// Wakes peer's EPOLLOUT when this side gets fresh bytes to forward.
-static int arm_peer_out(int epfd, conn_t *peer, int want_in) {
-    if (!peer || peer->fd < 0) return 0;
-    uint32_t ev = EPOLLET | (want_in ? EPOLLIN : 0);
-    if (peer->fill > peer->off) ev |= EPOLLOUT;
-    struct epoll_event e = { .events = ev, .data.fd = peer->fd };
-    return epoll_ctl(epfd, EPOLL_CTL_MOD, peer->fd, &e);
-}
-
 // Le bytes do fd ate EAGAIN; armazena no buf do peer (que sera enviado para o peer).
 static int pump_in(int epfd, conn_t *c) {
     conn_t *peer = slot(c->peer_fd);
@@ -162,8 +153,8 @@ int rnh_proxy_run(const rnh_proxy_opts_t *opts) {
                         c->fd = -1; u->fd = -1;
                         continue;
                     }
-                    struct epoll_event ce = { .events = EPOLLIN | EPOLLET, .data.fd = cfd };
-                    struct epoll_event ue = { .events = EPOLLIN | EPOLLET, .data.fd = ufd };
+                    struct epoll_event ce = { .events = EPOLLIN | EPOLLOUT | EPOLLET | EPOLLRDHUP, .data.fd = cfd };
+                    struct epoll_event ue = { .events = EPOLLIN | EPOLLOUT | EPOLLET | EPOLLRDHUP, .data.fd = ufd };
                     if (epoll_ctl(epfd, EPOLL_CTL_ADD, cfd, &ce) != 0 ||
                         epoll_ctl(epfd, EPOLL_CTL_ADD, ufd, &ue) != 0) {
                         free(c->buf); free(u->buf);
@@ -186,17 +177,25 @@ int rnh_proxy_run(const rnh_proxy_opts_t *opts) {
             // Sempre tenta drenar este lado tambem (pode haver dados acumulados).
             if (!fatal && c->fill > c->off) { if (pump_out(c) != 0) fatal = 1; }
 
+            // Em EPOLLET o peer nao recebe novo EPOLLOUT se nao houver
+            // transicao do socket; quando acabamos de empurrar bytes para
+            // o buf do peer (via pump_in), drenamos diretamente aqui.
+            if (!fatal) {
+                conn_t *peer = slot(c->peer_fd);
+                if (peer && peer->fd >= 0 && peer->fill > peer->off) {
+                    if (pump_out(peer) != 0) {
+                        pair_drop(epfd, fd);
+                        continue;
+                    }
+                }
+            }
+
             if (fatal) { pair_drop(epfd, fd); continue; }
 
-            // Atualiza interesse: este lado le se buf do peer tem espaco;
-            // este lado escreve se ha bytes pendentes.
-            conn_t *peer = slot(c->peer_fd);
-            uint32_t ev_self = EPOLLET;
-            if (peer && peer->fill < g_bufsize) ev_self |= EPOLLIN;
-            if (c->fill > c->off)               ev_self |= EPOLLOUT;
-            struct epoll_event se = { .events = ev_self, .data.fd = fd };
-            (void)epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &se);
-            (void)arm_peer_out(epfd, peer, peer && peer->fill < g_bufsize);
+            // Interesse IN/OUT ja esta armado em ET desde o accept; sem
+            // epoll_ctl(MOD) no hot path. EPOLLET garante apenas 1 wakeup
+            // por transicao readable/writable; ja drenamos o que da no
+            // pump_in/pump_out acima.
         }
     }
 

@@ -36,13 +36,11 @@ rnh_http_result_t rnh_http_parse(rnh_http_req_t *r) {
         return RNH_HTTP_NEED_MORE;
     }
 
-    // Procura fim dos headers.
+    // Procura fim dos headers (memmem do glibc usa SIMD em buffers pequenos).
     uint8_t *eoh = NULL;
-    for (uint32_t i = 0; i + 3 < fill; i++) {
-        if (buf[i] == '\r' && buf[i+1] == '\n' && buf[i+2] == '\r' && buf[i+3] == '\n') {
-            eoh = buf + i + 4;
-            break;
-        }
+    {
+        void *p = memmem(buf, fill, "\r\n\r\n", 4);
+        if (p) eoh = (uint8_t *)p + 4;
     }
     if (!eoh) {
         if (fill >= RNH_HTTP_BUF_SIZE) return RNH_HTTP_BAD;

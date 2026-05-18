@@ -44,7 +44,9 @@ int main(void) {
         .backlog    = backlog,
         .upstreams  = ups,
         .nupstreams = nup,
-        .buf_size   = 16384u,
+        // Payload tipico = HTTP req com body JSON ~1KB; resposta ~100B.
+        // 4KB cobre folgado e melhora cache locality.
+        .buf_size   = 4096u,
     };
     return rnh_proxy_run(&opts) == 0 ? 0 : 1;
 }
