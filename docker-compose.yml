@@ -27,7 +27,7 @@ services:
       resources:
         limits:
           cpus: "0.04"
-          memory: "30M"
+          memory: "20M"
 
   api1:
     image: "lucasmenchon/rinha-de-backend-2026-c:fast-lb-api-20260518-1"
@@ -72,7 +72,7 @@ services:
       resources:
         limits:
           cpus: "0.48"
-          memory: "160M"
+          memory: "165M"
 
   api2:
     image: "lucasmenchon/rinha-de-backend-2026-c:fast-lb-api-20260518-1"
@@ -117,7 +117,7 @@ services:
       resources:
         limits:
           cpus: "0.48"
-          memory: "160M"
+          memory: "165M"
 
 networks:
   rinha:
