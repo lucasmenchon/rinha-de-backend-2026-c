@@ -17,7 +17,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.55"
+          cpus: "0.45"
           memory: "160MB"
     healthcheck:
       test: ["CMD-SHELL", "test -S /run/rnh/score-a.sock"]
@@ -37,7 +37,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.55"
+          cpus: "0.45"
           memory: "160MB"
     healthcheck:
       test: ["CMD-SHELL", "test -S /run/rnh/score-b.sock"]
@@ -63,7 +63,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.40"
+          cpus: "0.10"
           memory: "30MB"
 
 volumes:
