@@ -1,6 +1,6 @@
 services:
   score-a:
-    image: "lucasmenchon/rinha-de-backend-2026-c:latest"
+    image: "lucasmenchon/rinha-de-backend-2026-c:score-edge-20260518-1"
     platform: linux/amd64
     command: ["/app/score"]
     environment:
@@ -29,7 +29,7 @@ services:
       retries: 5
 
   score-b:
-    image: "lucasmenchon/rinha-de-backend-2026-c:latest"
+    image: "lucasmenchon/rinha-de-backend-2026-c:score-edge-20260518-1"
     platform: linux/amd64
     command: ["/app/score"]
     environment:
@@ -58,7 +58,7 @@ services:
       retries: 5
 
   edge:
-    image: "lucasmenchon/rinha-de-backend-2026-c:latest"
+    image: "lucasmenchon/rinha-de-backend-2026-c:score-edge-20260518-1"
     platform: linux/amd64
     command: ["/app/edge"]
     environment:
