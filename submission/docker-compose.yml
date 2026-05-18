@@ -1,0 +1,96 @@
+services:
+  score-a:
+    image: "lucasmenchon/rinha-de-backend-2026-c:latest"
+    platform: linux/amd64
+    command: ["/app/score"]
+    environment:
+      RNH_INDEX: "/app/index.bin"
+      RNH_SOCK: "/run/rnh/score-a.sock"
+      RNH_NPROBE: "12"
+    volumes:
+      - rnhsock:/run/rnh
+    networks:
+      - rinha
+    logging:
+      driver: "none"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+    deploy:
+      resources:
+        limits:
+          cpus: "0.55"
+          memory: "160M"
+    healthcheck:
+      test: ["CMD-SHELL", "test -S /run/rnh/score-a.sock"]
+      interval: 5s
+      timeout: 2s
+      retries: 5
+
+  score-b:
+    image: "lucasmenchon/rinha-de-backend-2026-c:latest"
+    platform: linux/amd64
+    command: ["/app/score"]
+    environment:
+      RNH_INDEX: "/app/index.bin"
+      RNH_SOCK: "/run/rnh/score-b.sock"
+      RNH_NPROBE: "12"
+    volumes:
+      - rnhsock:/run/rnh
+    networks:
+      - rinha
+    logging:
+      driver: "none"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+    deploy:
+      resources:
+        limits:
+          cpus: "0.55"
+          memory: "160M"
+    healthcheck:
+      test: ["CMD-SHELL", "test -S /run/rnh/score-b.sock"]
+      interval: 5s
+      timeout: 2s
+      retries: 5
+
+  edge:
+    image: "lucasmenchon/rinha-de-backend-2026-c:latest"
+    platform: linux/amd64
+    command: ["/app/edge"]
+    environment:
+      RNH_LISTEN: "9999"
+      RNH_UPSTREAMS: "/run/rnh/score-a.sock,/run/rnh/score-b.sock"
+      RNH_BACKLOG: "65535"
+    ports:
+      - "9999:9999"
+    volumes:
+      - rnhsock:/run/rnh
+    networks:
+      - rinha
+    depends_on:
+      score-a:
+        condition: service_healthy
+      score-b:
+        condition: service_healthy
+    logging:
+      driver: "none"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+    deploy:
+      resources:
+        limits:
+          cpus: "0.40"
+          memory: "30M"
+
+networks:
+  rinha:
+    driver: bridge
+
+volumes:
+  rnhsock:

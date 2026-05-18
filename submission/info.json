@@ -1,0 +1,11 @@
+{
+  "participants": [
+    "Lucas Menchon"
+  ],
+  "social": [
+    "https://github.com/lucasmenchon"
+  ],
+  "source-code-repo": "https://github.com/lucasmenchon/rinha-de-backend-2026-c",
+  "stack": ["c", "linux", "epoll", "unix-sockets", "ivf", "avx2", "mmap"],
+  "open_to_work": false
+}

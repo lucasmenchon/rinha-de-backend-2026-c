@@ -1,0 +1,70 @@
+# Rinha de Backend 2026 - candidato C/AVX2 com IVF
+#
+# Topologia: cliente -> edge (TCP 9999) -> score-a / score-b (Unix socket)
+# Budget total: 1.5 CPU / 350 MB (mac mini host)
+
+services:
+  score-a:
+    image: lucasmenchon/rinha2026:latest
+    build: .
+    command: ["/app/score"]
+    environment:
+      RNH_INDEX: /app/index.bin
+      RNH_SOCK:  /run/rnh/score-a.sock
+      RNH_NPROBE: "12"
+    volumes:
+      - rnhsock:/run/rnh
+    deploy:
+      resources:
+        limits:
+          cpus: "0.55"
+          memory: "160MB"
+    healthcheck:
+      test: ["CMD-SHELL", "test -S /run/rnh/score-a.sock"]
+      interval: 5s
+      timeout: 2s
+      retries: 5
+
+  score-b:
+    image: lucasmenchon/rinha2026:latest
+    command: ["/app/score"]
+    environment:
+      RNH_INDEX: /app/index.bin
+      RNH_SOCK:  /run/rnh/score-b.sock
+      RNH_NPROBE: "12"
+    volumes:
+      - rnhsock:/run/rnh
+    deploy:
+      resources:
+        limits:
+          cpus: "0.55"
+          memory: "160MB"
+    healthcheck:
+      test: ["CMD-SHELL", "test -S /run/rnh/score-b.sock"]
+      interval: 5s
+      timeout: 2s
+      retries: 5
+
+  edge:
+    image: lucasmenchon/rinha2026:latest
+    command: ["/app/edge"]
+    environment:
+      RNH_LISTEN: "9999"
+      RNH_UPSTREAMS: "/run/rnh/score-a.sock,/run/rnh/score-b.sock"
+    ports:
+      - "9999:9999"
+    volumes:
+      - rnhsock:/run/rnh
+    depends_on:
+      score-a:
+        condition: service_healthy
+      score-b:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "0.40"
+          memory: "30MB"
+
+volumes:
+  rnhsock:
