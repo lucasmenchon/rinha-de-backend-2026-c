@@ -44,6 +44,44 @@ skip {
 echo "Patch 1 applied: memmem in find_header_end"
 
 # ---------------------------------------------------------------------------
+# Patch 1b: api/main.c — drain client fd until EAGAIN.
+#
+# Requests are small, and the LB hands the accepted fd to the API after the
+# client has already started writing. Draining available bytes avoids an extra
+# epoll turn when header/body arrive split across reads.
+# ---------------------------------------------------------------------------
+awk '
+/^static int read_conn\(/ { skip=1; depth=0 }
+skip && /\{/ { depth++ }
+skip && /\}/ {
+    depth--
+    if (depth == 0) {
+        print "static int read_conn(conn_t *conn, const rinha_index_t *index, int close_after_response) {"
+        print "    for (;;) {"
+        print "        if (conn->have == sizeof(conn->buf)) return 0;"
+        print "        ssize_t n = read(conn->fd, conn->buf + conn->have, sizeof(conn->buf) - conn->have);"
+        print "        if (n > 0) {"
+        print "            conn->have += (size_t)n;"
+        print "            if (!process_buffer(conn, index, close_after_response)) return 0;"
+        print "            continue;"
+        print "        }"
+        print "        if (n == 0) return 0;"
+        print "        if (errno == EINTR) continue;"
+        print "        if (errno == EAGAIN || errno == EWOULDBLOCK) return 1;"
+        print "        return 0;"
+        print "    }"
+        print "}"
+        skip=0
+        next
+    }
+}
+skip { next }
+{ print }
+' "$API_MAIN" > "$API_MAIN.tmp" && mv "$API_MAIN.tmp" "$API_MAIN"
+
+echo "Patch 1b applied: drain read_conn until EAGAIN"
+
+# ---------------------------------------------------------------------------
 # Patch 2: common/search.c — replace scan_unscanned_lists
 #
 # Problem: the original function calls list_was_scanned() for every list,
