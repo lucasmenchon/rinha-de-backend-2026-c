@@ -7,6 +7,9 @@
 #      - scans in lb order with early termination when lb >= current worst_dist
 set -e
 
+API_MAIN="src/api/main.c"
+SEARCH_SRC="src/common/search.c"
+
 # ---------------------------------------------------------------------------
 # Patch 1: api/main.c — memmem for \r\n\r\n header scan
 # Replace the entire find_header_end function body.
@@ -18,20 +21,25 @@ set -e
 #   }
 # ---------------------------------------------------------------------------
 awk '
-/^static size_t find_header_end/ { skip=1; next }
-skip && /^}$/ {
+/^static size_t find_header_end/ {
     print "static size_t find_header_end(const char *data, size_t len) {"
     print "    if (len < 4) return (size_t)-1;"
     print "    const void *p = memmem(data, len, \"\\r\\n\\r\\n\", 4);"
     print "    if (p == NULL) return (size_t)-1;"
     print "    return (size_t)((const char *)p - data);"
     print "}"
-    skip=0
+    skip=1
+    depth=1
     next
 }
-skip { next }
+skip {
+    depth += gsub(/\{/, "{")
+    depth -= gsub(/\}/, "}")
+    if (depth == 0) skip=0
+    next
+}
 { print }
-' api/main.c > api/main.c.tmp && mv api/main.c.tmp api/main.c
+' "$API_MAIN" > "$API_MAIN.tmp" && mv "$API_MAIN.tmp" "$API_MAIN"
 
 echo "Patch 1 applied: memmem in find_header_end"
 
@@ -53,6 +61,19 @@ echo "Patch 1 applied: memmem in find_header_end"
 # Result: exact_fallback scans ~5-50 lists instead of ~400, saving ~1ms
 # for the slowest 1% of requests (p99 target: ≤1ms).
 # ---------------------------------------------------------------------------
+# list_was_scanned becomes dead code after the bitmask replacement; remove it
+# so the build stays clean with -Werror.
+awk '
+/^static int list_was_scanned\(/ { skip=1; depth=1; next }
+skip {
+    depth += gsub(/\{/, "{")
+    depth -= gsub(/\}/, "}")
+    if (depth == 0) skip=0
+    next
+}
+{ print }
+' "$SEARCH_SRC" > "$SEARCH_SRC.tmp" && mv "$SEARCH_SRC.tmp" "$SEARCH_SRC"
+
 awk '
 /^static void scan_unscanned_lists\(/ { skip=1; depth=0 }
 skip && /\{/ { depth++ }
@@ -95,6 +116,6 @@ skip && /\}/ {
 }
 skip { next }
 { print }
-' common/search.c > common/search.c.tmp && mv common/search.c.tmp common/search.c
+' "$SEARCH_SRC" > "$SEARCH_SRC.tmp" && mv "$SEARCH_SRC.tmp" "$SEARCH_SRC"
 
 echo "Patch 2 applied: sorted scan_unscanned_lists with bitmask + early termination"

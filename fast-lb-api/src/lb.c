@@ -3,6 +3,7 @@
  *   - SOCK_SEQPACKET unix connects (matches jonathanperis SOCK_SEQPACKET listener)
  *   - BACKLOG env support
  *   - TCP_QUICKACK on accepted client sockets
+ *   - accepted client sockets are passed as nonblocking fds
  */
 
 #define _GNU_SOURCE
@@ -231,7 +232,7 @@ static void write_bad_gateway(int fd) {
 static void *worker_loop(void *arg) {
     Worker *worker = arg;
     for (;;) {
-        int client_fd = accept4(worker->lb->listener_fd, NULL, NULL, SOCK_CLOEXEC);
+        int client_fd = accept4(worker->lb->listener_fd, NULL, NULL, SOCK_CLOEXEC | SOCK_NONBLOCK);
         if (client_fd < 0) {
             if (errno == EINTR) continue;
             continue;
