@@ -35,8 +35,11 @@ RUN make -j$(nproc) all \
                  -fomit-frame-pointer -fno-plt -fno-semantic-interposition \
                  -fno-trapping-math -DRINHA_ASSUME_PASSED_FD_FLAGS"
 
-# generate index (4096 IVF clusters — same as original submission)
-RUN ./build/build-index resources/references.json.gz resources/index.bin 4096
+# generate IVF/block8 index. Reference fraud fastpaths are intentionally
+# aggressive: only buckets that are pure fraud in references are materialized.
+RUN BUCKET_REFERENCE_FASTPATH1_FRAUD_MIN_COUNT=1 \
+    BUCKET_REFERENCE_FASTPATH2_FRAUD_MIN_COUNT=1 \
+    ./build/build-index resources/references.json.gz resources/index.bin 4096
 
 RUN strip build/api build/lb
 
